@@ -51,6 +51,7 @@ Neutron Internals
    advanced_services
    oslo-incubator
    callbacks
+   routed_networks
 
 Testing
 -------
