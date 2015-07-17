@@ -73,6 +73,7 @@ TYPE_LOCAL = 'local'
 TYPE_VXLAN = 'vxlan'
 TYPE_VLAN = 'vlan'
 TYPE_NONE = 'none'
+TYPE_ROUTED = 'routed'
 
 # Values for network_type
 
