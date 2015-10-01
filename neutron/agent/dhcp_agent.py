@@ -17,6 +17,7 @@
 import functools
 import json
 import mock
+import netaddr
 import os
 import socket
 import sys
@@ -39,7 +40,9 @@ from neutron.openstack.common import log as logging
 from neutron.openstack.common import service
 from neutron import service as neutron_service
 
+from calico.datamodel_v1 import dir_for_host
 from calico.etcdutils import EtcdWatcher
+from calico.felix.futils import intern_dict
 
 LOG = logging.getLogger(__name__)
 
@@ -63,6 +66,8 @@ json_decoder = json.JSONDecoder(
     object_hook=functools.partial(intern_dict,
                                   fields_to_intern=FIELDS_TO_INTERN)
 )
+
+NETWORK_ID = 'calico'
 
 
 class DhcpAgent(manager.Manager):
@@ -211,31 +216,33 @@ class DhcpAgent(manager.Manager):
                               'cidr': cidr,
                               'dns_nameservers': [],
                               'id': cidr,
-                              'gateway_ip': endpoint[gateway_ip],
+                              'gateway_ip': endpoint[gateway_key],
                               'host_routes': []}
                     net = dhcp.NetModel(False,
                                         {"id": net.id,
                                          "subnets": net.subnets + [subnet],
-                                         "ports": net.ports})
+                                         "ports": net.ports,
+                                         "tenant_id": "calico"})
                     self.cache.put(net)
                     subnets_changed = True
 
                 # Generate the fixed IPs for the endpoint on this subnet.
                 fixed_ips += [ {'subnet_id': cidr,
-                                'ip_address': net.split('/')[0]}
-                               for net in endpoint[nets_key] ]
-
+                                'ip_address': n.split('/')[0]}
+                               for n in endpoint[nets_key] ]
+        LOG.info("net: %s", net)
         if subnets_changed:
             self.call_driver('restart', net)
 
         # Construct port equivalent of endpoint data.
-        port = {'id': endpoint['name'],
+        port = {'id': endpoint_id,
                 'network_id': NETWORK_ID,
                 'device_owner': 'calico',
                 'fixed_ips': fixed_ips,
                 'mac_address': endpoint['mac'],
                 'extra_dhcp_opts': []}
         self.cache.put_port(dhcp.DictModel(port))
+        LOG.info("port: %s", port)
 
         self.call_driver('reload_allocations', net)
 
@@ -243,11 +250,8 @@ class DhcpAgent(manager.Manager):
                            workload_id, endpoint_id):
         """Handler for endpoint deleted, passes the update to the splitter."""
 
-        # Get the endpoint data.
-        endpoint = json_decoder.decode(response.value)
-
         # Find the corresponding port in the DHCP agent's cache.
-        port = self.cache.get_port_by_id(endpoint['name'])
+        port = self.cache.get_port_by_id(endpoint_id)
         if port:
             self.cache.remove_port(port)
             self.call_driver('reload_allocations', net)
