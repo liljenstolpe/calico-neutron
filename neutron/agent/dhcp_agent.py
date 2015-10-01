@@ -70,6 +70,37 @@ json_decoder = json.JSONDecoder(
 NETWORK_ID = 'calico'
 
 
+class FakePlugin(object):
+
+    def create_dhcp_port(self, port):
+        """
+        dhcp_port = self.plugin.create_dhcp_port({'port': port_dict})
+        """
+        LOG.debug("create_dhcp_port: %s", port)
+        port['port']['id'] = 'dhcp'
+        port['port']['mac_address'] = '00:11:22:33:44:55'
+        return dhcp.DictModel(port['port'])
+
+    def update_dhcp_port(self, port_id, port):
+        """
+        dhcp_port = self.plugin.update_dhcp_port(
+            port.id, {'port': {'network_id': network.id,
+                               'fixed_ips': port_fixed_ips}})
+
+        dhcp_port = self.plugin.update_dhcp_port(
+            port.id, {'port': {'network_id': network.id,
+                               'device_id': device_id}})
+        """
+        LOG.debug("update_dhcp_port: %s %s", port_id, port)
+
+    def release_dhcp_port(self, network_id, device_id):
+        """
+        self.plugin.release_dhcp_port(network.id,
+                                      self.get_device_id(network))
+        """
+        LOG.debug("release_dhcp_port: %s %s", network_id, device_id)
+
+
 class DhcpAgent(manager.Manager):
     """
     DHCP agent.  Manages a DHCP driver (such as the dnsmasq wrapper).
@@ -127,6 +158,8 @@ class DhcpAgent(manager.Manager):
                                    'inner': e})
             LOG.error(msg)
             raise SystemExit(msg)
+
+        self.plugin = FakePlugin()
 
         # create dhcp dir to store dhcp info
         dhcp_dir = os.path.dirname("/%s/dhcp/" % self.conf.state_path)
@@ -299,7 +332,7 @@ class DhcpAgent(manager.Manager):
                                           network,
                                           self.root_helper,
                                           self.dhcp_version,
-                                          mock.Mock())
+                                          self.plugin)
 
             getattr(driver, action)(**action_kwargs)
             return True
